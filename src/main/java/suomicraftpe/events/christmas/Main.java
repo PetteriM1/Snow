@@ -3,6 +3,7 @@ package suomicraftpe.events.christmas;
 import cn.nukkit.event.EventHandler;
 import cn.nukkit.event.Listener;
 import cn.nukkit.event.level.ChunkLoadEvent;
+import cn.nukkit.level.Level;
 import cn.nukkit.plugin.PluginBase;
 import cn.nukkit.utils.Config;
 
@@ -21,10 +22,14 @@ public class Main extends PluginBase implements Listener {
         getServer().getPluginManager().registerEvents(this, this);
 
         for (String s : config.getStringList("worlds")) {
-            if (config.getInt("mode") == 0) {
-                getServer().getLevelByName(s).setRaining(true);
-            } else if (config.getInt("mode") == 1) {
-                getServer().getLevelByName(s).setRaining(false);
+            Level l = getServer().getLevelByName(s);
+
+            if (l != null) {
+                if (config.getInt("mode") == 0) {
+                    l.setRaining(true);
+                } else if (config.getInt("mode") == 1) {
+                    l.setRaining(false);
+                }
             }
         }
     }
