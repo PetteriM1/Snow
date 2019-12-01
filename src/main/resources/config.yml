@@ -1,3 +1,7 @@
+# 0 = snow
+# 1 = make biome to plains
 mode: 0
+
+# list of worlds where snowing is enabled
 worlds:
   - "lobby"
