@@ -1,7 +1,13 @@
+# true = change biomes server side (remember to take a backup of worlds and don't use on smp server)
+# false = change biomes client side (affects all worlds, biomes will revert back to normal when the plugin is removed)
+legacy: false
+
+# (for legacy mode only)
 # 0 = snow
 # 1 = make biome to plains
 mode: 0
 
+# (for legacy mode only)
 # list of worlds where snowing is enabled
 worlds:
-  - "lobby"
+  - "world"

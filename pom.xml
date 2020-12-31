@@ -6,7 +6,7 @@
 
     <groupId>suomicraftpe.events.christmas</groupId>
     <artifactId>Snow</artifactId>
-    <version>1.1.0</version>
+    <version>2.0</version>
     <build>
         <defaultGoal>install</defaultGoal>
         <sourceDirectory>${basedir}/src/main/java</sourceDirectory>
