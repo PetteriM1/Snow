@@ -7,7 +7,6 @@ legacy: false
 # 1 = make biome to plains
 mode: 0
 
-# (for legacy mode only)
 # list of worlds where snowing is enabled
 worlds:
   - "world"
