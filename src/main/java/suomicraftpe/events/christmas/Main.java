@@ -26,6 +26,9 @@ import java.util.List;
  */
 public class Main extends PluginBase implements Listener {
 
+    private static final int MODE_SNOW = 0;
+    private static final int MODE_RESET = 1;
+
     private static int mode;
     private static boolean legacy;
     private static List<String> worlds;
@@ -36,29 +39,45 @@ public class Main extends PluginBase implements Listener {
         mode = getConfig().getInt("mode");
         legacy = getConfig().getBoolean("legacy");
         worlds = getConfig().getStringList("worlds");
-        getServer().getPluginManager().registerEvents(this, this);
 
-        if (!legacy) {
-            if (mode != 0) {
-                getLogger().error("The 'mode' setting is only available in the legacy mode");
-            }
+        if (legacy) {
+            getLogger().warning("The biome of loaded chunks is changed when legacy mode is used. Remember to take a backup!");
+        } else {
+            new BiomeDefinitionListPacket();
+            Class<?> c_BiomeDefinitionListPacket;
             try {
-                new BiomeDefinitionListPacket();
-                Class<?> c_BiomeDefinitionListPacket = Class.forName("cn.nukkit.network.protocol.BiomeDefinitionListPacket");
-                Field f_TAG = c_BiomeDefinitionListPacket.getDeclaredField("TAG");
-                f_TAG.setAccessible(true);
-                Field f_modifiers = Field.class.getDeclaredField("modifiers");
-                f_modifiers.setAccessible(true);
-                f_modifiers.setInt(f_TAG, f_TAG.getModifiers() & ~Modifier.FINAL);
-                byte[] TAG = (byte[]) f_TAG.get(null);
-                Tag compoundTag = NBTIO.readTag(new ByteArrayInputStream(TAG), ByteOrder.BIG_ENDIAN, true);
-                for (Tag tag : ((CompoundTag) compoundTag).getAllTags()) {
-                    ((CompoundTag) tag).putFloat("temperature", -0.5f);
-                }
-                TAG = NBTIO.writeNetwork(compoundTag);
-                f_TAG.set(null, TAG);
-            } catch (Exception ex) {
-                getLogger().error("Failed to patch BiomeDefinitionListPacket", ex);
+                c_BiomeDefinitionListPacket = Class.forName("cn.nukkit.network.protocol.BiomeDefinitionListPacket");
+            } catch (ClassNotFoundException e) {
+                throw new RuntimeException(e);
+            }
+            patchBiomeList(c_BiomeDefinitionListPacket, "TAG", false);
+            patchBiomeList(c_BiomeDefinitionListPacket, "TAG_486", true);
+            patchBiomeList(c_BiomeDefinitionListPacket, "TAG_419", true);
+            patchBiomeList(c_BiomeDefinitionListPacket, "TAG_361", true);
+        }
+
+        getServer().getPluginManager().registerEvents(this, this);
+    }
+
+    private void patchBiomeList(Class<?> c_BiomeDefinitionListPacket, String fieldName, boolean multiversion) {
+        try {
+            Field f_TAG = c_BiomeDefinitionListPacket.getDeclaredField(fieldName);
+            f_TAG.setAccessible(true);
+            Field f_modifiers = Field.class.getDeclaredField("modifiers");
+            f_modifiers.setAccessible(true);
+            f_modifiers.setInt(f_TAG, f_TAG.getModifiers() & ~Modifier.FINAL);
+            byte[] TAG = (byte[]) f_TAG.get(null);
+            Tag compoundTag = NBTIO.readTag(new ByteArrayInputStream(TAG), ByteOrder.BIG_ENDIAN, true);
+            for (Tag tag : ((CompoundTag) compoundTag).getAllTags()) {
+                ((CompoundTag) tag).putFloat("temperature", -0.5f);
+            }
+            TAG = NBTIO.writeNetwork(compoundTag);
+            f_TAG.set(null, TAG);
+        } catch (Exception ex) {
+            if (multiversion) {
+                getLogger().debug("Failed to patch BiomeDefinitionListPacket " + fieldName + ", maybe this software doesn't have multiversion support", ex);
+            } else {
+                getLogger().error("Failed to patch BiomeDefinitionListPacket " + fieldName, ex);
             }
         }
     }
@@ -66,13 +85,13 @@ public class Main extends PluginBase implements Listener {
     @EventHandler
     public void onChunkLoad(ChunkLoadEvent e) {
         if (legacy && worlds.contains(e.getLevel().getName())) {
-            if (mode == 0) {
+            if (mode == MODE_SNOW) {
                 for (int x = 0; x < 16; x++) {
                     for (int z = 0; z < 16; z++) {
                         e.getChunk().setBiomeId(x, z, 12);
                     }
                 }
-            } else if (mode == 1) {
+            } else if (mode == MODE_RESET) {
                 for (int x = 0; x < 16; x++) {
                     for (int z = 0; z < 16; z++) {
                         e.getChunk().setBiomeId(x, z, 1);
@@ -84,7 +103,7 @@ public class Main extends PluginBase implements Listener {
 
     @EventHandler
     public void onWeatherChange(WeatherChangeEvent e) {
-        if (mode == 0 && worlds.contains(e.getLevel().getName())) {
+        if ((mode == MODE_SNOW || !legacy) && worlds.contains(e.getLevel().getName())) {
             e.setCancelled(true);
         }
     }
@@ -102,7 +121,7 @@ public class Main extends PluginBase implements Listener {
     }
 
     private void setRaining(Player p) {
-        if (mode == 0 && worlds.contains(p.getLevel().getName())) {
+        if ((mode == MODE_SNOW || !legacy) && worlds.contains(p.getLevel().getName())) {
             getServer().getScheduler().scheduleDelayedTask(this, () -> {
                 if (p.isOnline() && worlds.contains(p.getLevel().getName())) {
                     LevelEventPacket pk = new LevelEventPacket();
