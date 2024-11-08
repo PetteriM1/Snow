@@ -1,5 +1,5 @@
 name: Snow
 version: "${pom.version}"
-api: ["1.0.11"]
+api: ["1.1.0"]
 author: PetteriM1
 main: suomicraftpe.events.christmas.Main

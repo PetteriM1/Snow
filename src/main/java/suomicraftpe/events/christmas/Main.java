@@ -1,5 +1,6 @@
 package suomicraftpe.events.christmas;
 
+import cn.nukkit.Nukkit;
 import cn.nukkit.Player;
 import cn.nukkit.event.EventHandler;
 import cn.nukkit.event.Listener;
@@ -13,12 +14,15 @@ import cn.nukkit.nbt.tag.Tag;
 import cn.nukkit.network.protocol.BiomeDefinitionListPacket;
 import cn.nukkit.network.protocol.LevelEventPacket;
 import cn.nukkit.plugin.PluginBase;
+import com.google.common.io.ByteStreams;
 
 import java.io.ByteArrayInputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.nio.ByteOrder;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.zip.Deflater;
 
 /**
  * SuomiCraft PE Events / Christmas
@@ -31,54 +35,49 @@ public class Main extends PluginBase implements Listener {
 
     private static int mode;
     private static boolean legacy;
-    private static List<String> worlds;
+    private static Set<String> worlds;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         mode = getConfig().getInt("mode");
         legacy = getConfig().getBoolean("legacy");
-        worlds = getConfig().getStringList("worlds");
+        worlds = new HashSet<>(getConfig().getStringList("worlds"));
 
         if (legacy) {
             getLogger().warning("The biome of loaded chunks is changed when legacy mode is used. Remember to take a backup!");
         } else {
-            new BiomeDefinitionListPacket();
-            Class<?> c_BiomeDefinitionListPacket;
-            try {
-                c_BiomeDefinitionListPacket = Class.forName("cn.nukkit.network.protocol.BiomeDefinitionListPacket");
-            } catch (ClassNotFoundException e) {
-                throw new RuntimeException(e);
-            }
-            patchBiomeList(c_BiomeDefinitionListPacket, "TAG", false);
-            patchBiomeList(c_BiomeDefinitionListPacket, "TAG_486", true);
-            patchBiomeList(c_BiomeDefinitionListPacket, "TAG_419", true);
-            patchBiomeList(c_BiomeDefinitionListPacket, "TAG_361", true);
+            patchBiomeList();
         }
 
         getServer().getPluginManager().registerEvents(this, this);
     }
 
-    private void patchBiomeList(Class<?> c_BiomeDefinitionListPacket, String fieldName, boolean multiversion) {
+    private void patchBiomeList() {
         try {
-            Field f_TAG = c_BiomeDefinitionListPacket.getDeclaredField(fieldName);
-            f_TAG.setAccessible(true);
-            Field f_modifiers = Field.class.getDeclaredField("modifiers");
-            f_modifiers.setAccessible(true);
-            f_modifiers.setInt(f_TAG, f_TAG.getModifiers() & ~Modifier.FINAL);
-            byte[] TAG = (byte[]) f_TAG.get(null);
+            Class<?> c_BiomeDefinitionListPacket = Class.forName("cn.nukkit.network.protocol.BiomeDefinitionListPacket");
+
+            byte[] TAG = ByteStreams.toByteArray(Nukkit.class.getClassLoader().getResourceAsStream("biome_definitions.dat"));
             Tag compoundTag = NBTIO.readTag(new ByteArrayInputStream(TAG), ByteOrder.BIG_ENDIAN, true);
             for (Tag tag : ((CompoundTag) compoundTag).getAllTags()) {
                 ((CompoundTag) tag).putFloat("temperature", -0.5f);
             }
             TAG = NBTIO.writeNetwork(compoundTag);
-            f_TAG.set(null, TAG);
+
+            BiomeDefinitionListPacket pk = new BiomeDefinitionListPacket();
+            Field f_tag = c_BiomeDefinitionListPacket.getDeclaredField("tag");
+            f_tag.setAccessible(true);
+            f_tag.set(pk, TAG);
+            pk.tryEncode();
+
+            Field f_CACHED_PACKET = c_BiomeDefinitionListPacket.getDeclaredField("CACHED_PACKET");
+            f_CACHED_PACKET.setAccessible(true);
+            Field f_modifiers = Field.class.getDeclaredField("modifiers");
+            f_modifiers.setAccessible(true);
+            f_modifiers.setInt(f_CACHED_PACKET, f_CACHED_PACKET.getModifiers() & ~Modifier.FINAL);
+            f_CACHED_PACKET.set(null, pk.compress(Deflater.BEST_COMPRESSION));
         } catch (Exception ex) {
-            if (multiversion) {
-                getLogger().debug("Failed to patch BiomeDefinitionListPacket " + fieldName + ", maybe this software doesn't have multiversion support", ex);
-            } else {
-                getLogger().error("Failed to patch BiomeDefinitionListPacket " + fieldName, ex);
-            }
+            getLogger().error("Failed to patch BiomeDefinitionListPacket", ex);
         }
     }
 
